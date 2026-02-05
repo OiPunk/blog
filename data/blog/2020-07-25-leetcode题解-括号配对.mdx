@@ -1,0 +1,63 @@
+---
+title: 'LeetCode题解--括号配对'
+date: '2020-07-25'
+tags: ['算法']
+draft: false
+summary: '括号配对问题详解'
+---
+
+#### 括号配对
+
+括号有效配对是指：  
+1）任何一个左括号都能找到和其正确配对的右括号  
+2）任何一个右括号都能找到和其正确配对的左括号  
+有效的： (()) ()() (()()) 等  
+无效的： (() )( 等
+
+##### 问题1: 怎么判断一个括号字符串有效？
+
+思路:
+
+1.  用栈: 麻烦
+2.  用单一变量, 遇到左括号count++, 遇到右括号count–, count<0,返回false, 最后count==0, 返回true
+
+```java
+public static boolean valid(String s) {    char[] str = s.tocharArray();    int count = 0;    for(int i = 0; i < str.length; i++) {        // 注意字符用单引号'('        count += str[i] == '(' ? 1 : -1;        if (count < 0) return false;    }    return count == 0;}
+```
+
+##### 问题2: 如果一个括号字符串无效，返回至少填几个字符能让其整体有效 (LeetCode 921)
+
+思路:
+
+1.  遇到左括号, count++, 遇到右括号, count–
+2.  如果count == -1, need++, count恢复成0
+3.  返回count + need
+
+```java
+public static int needParenthese (String s) {    char[] str = s.toCharArray();    int count = 0;    int need = 0;    for(int i = 0; i < str.length; i++) {        if(str[i] == '(') {            count++;        } else { // 遇到')'            if (count == 0) {                need++;            } else {                count--;            }        }    }    return count + need; }    public int minAddToMakeValid(String S) {        int L = 0;        int R = 0;        for (int i = 0; i 
+```
+
+##### 问题3: 返回一个括号字符串中，最长的括号有效子串的长度 (动态规划) (LeetCode 32)
+
+思路:
+
+1.  i位置是左括号, dp\[i\] = 0
+    
+2.  i位置是右括号, dp\[i\] = dp\[i - 1\] + 2 + (pre > 0 ? dp\[pre -1\] : 0);
+    
+3.  i位置往前推dp\[i-1\]个数, 的前一个数
+    
+    ![image-20200624125914653](/static/images/blog/image-20200624125914653.png)
+    
+
+```java
+public static int maxLength(String s) {	if(s == null || s.length() < 2) {		return 0;	}    char[] str = s.toCharArray();    int[] dp = new int[str.length];    int pre = 0;    int res = 0;    // 默认dp[0] = 0    for (int i = 1; i < str.length; i++) {        // 左括号不管        if(str[i] == ')') {            // 与str[i] 配对的左括号位置pre            pre = i - dp[i - 1] -1;            // pre是有效的, 并且是左括号            if (pre >= 0 && str[pre] == '(') {                // dp[i] = 前一个有效值 + 2 + 再前一个有效值(pre - 1要有效)                dp[i] = dp[i - 1] + 2 + (pre > 0 ? dp[pre -1] : 0);            }        }        res = Math.max(res, dp[i]);    }    return res;}
+```
+
+##### 问题4: 给定括号字符串, 返回该字符串最大嵌套层数
+
+思路: 遇到左括号count++, 遇到右括号count–, 返回count最大值
+
+```java
+public static boolean isValid(String s) {    if(s == null || s.length == 0) {        return false;    }    char[] str = s.toCharArray();    // 辅助变量    int status = 0;    for (int i = 0; i < str.length; i++) {        if (str[i] != ')' && str[i] != '(') {            return false;        }        if (str[i] == ')' && --status < 0) {            return false;        }        if (str[i] == '(') {            status++;        }    }    return status == 0;}public static int deep(String s) {	if(!isValid(s)) return 0;    char[] str = s.toCharArray();    int count = 0;    int max = 0;    for (int i = 0; i < str.length; i++) {        if (str[i] == '(') {            max = Math.max(max, ++count);        } else {            count--;        }    }    return max;}
+```

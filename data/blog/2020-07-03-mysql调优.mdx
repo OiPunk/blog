@@ -1,0 +1,520 @@
+---
+title: 'MySQL调优'
+date: '2020-07-03'
+tags: ['MySQL']
+draft: false
+summary: 'MySQL常用优化方法'
+---
+
+## MySQL调优
+
+#### 1\. 性能监控
+
+show profile
+
+此工具默认是禁用的，可以通过服务器变量在绘画级别动态的修改
+
+**set profiling=1;**
+
+当设置完成之后，在服务器上执行的所有语句，都会测量其耗费的时间和其他一些查询执行状态变更相关的数据。
+
+**select \* from emp;**
+
+在mysql的命令行模式下只能显示两位小数的时间，可以使用如下命令查看具体的执行时间
+
+**show profiles;**
+
+执行如下命令可以查看详细的每个步骤的时间：
+
+**show profile for query 1;**
+
+![image-20200412073731890](/static/images/blog/image-20200412073731890.png)
+
+show profiles 查看执行时间  
+![image-20200412074008668](/static/images/blog/image-20200412074008668.png)
+
+只精确到后两位
+
+show profile 最近执行的sql , 每个步骤多长时间  
+![image-20200412074108964](/static/images/blog/image-20200412074108964.png)
+
+show profile for query 2 查第二个  
+![image-20200412074312622](/static/images/blog/image-20200412074312622.png)
+
+show profile cpu  
+![image-20200412074403265](/static/images/blog/image-20200412074403265.png)
+
+![image-20200412075426618](/static/images/blog/image-20200412075426618.png)
+
+![image-20200412075506666](/static/images/blog/image-20200412075506666.png)
+
+**各连接池性能**
+
+![image-20200412081803049](/static/images/blog/image-20200412081803049.png)
+
+#### 2\. 表结构优化
+
+![image-20200412082617475](/static/images/blog/image-20200412082617475.png)
+
+应该尽量使用可以正确存储数据的最小数据类型，更小的数据类型通常更快，因为它们占用更少的磁盘、内存和CPU缓存，并且处理时需要的CPU周期更少，但是要确保没有低估需要存储的值的范围，如果无法确认哪个数据类型，就选择你认为不会超过范围的最小类型
+
+案例：
+
+设计两张表，设计不同的数据类型，查看表的容量
+
+```java
+import java.sql.Connection;import java.sql.DriverManager;import java.sql.PreparedStatement;public class Test {    public static void main(String[] args) throws Exception{        Class.forName("com.mysql.jdbc.Driver");        Connection conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/db1","root","123456");        PreparedStatement pstmt = conn.prepareStatement("insert into psn2 values(?,?)");        for (int i = 0; i < 20000; i++) {            pstmt.setInt(1,i);            pstmt.setString(2,i+"");            pstmt.addBatch();        }        pstmt.executeBatch();        conn.close();    }}
+```
+
+![image-20200412082918434](/static/images/blog/image-20200412082918434.png)
+
+![image-20200412083305650](/static/images/blog/image-20200412083305650.png)
+
+![image-20200412083622460](/static/images/blog/image-20200412083622460.png)
+
+bigint tinyint 占用空间不同 查询时间也不同
+
+![image-20200412083557968](/static/images/blog/image-20200412083557968.png)
+
+ip地址转数值 INET\_ATON/NTOA
+
+![image-20200412083813449](/static/images/blog/image-20200412083813449.png)
+
+简单数据类型的操作通常需要更少的CPU周期，例如，
+
+1、整型比字符操作代价更低，因为字符集和校对规则是字符比较比整型比较更复杂，
+
+2、使用mysql自建类型而不是字符串来存储日期和时间
+
+3、用整型存储IP地址
+
+案例：
+
+创建两张相同的表，改变日期的数据类型，查看SQL语句执行的速度
+
+![image-20200412084513504](/static/images/blog/image-20200412084513504.png)
+
+如果查询中包含可为NULL的列，对mysql来说很难优化，因为可为null的列使得索引、索引统计和值比较都更加复杂，坦白来说，通常情况下null的列改为not null带来的性能提升比较小，所有没有必要将所有的表的schema进行修改，但是应该尽量避免设计成可为null的列
+
+![image-20200412095640260](/static/images/blog/image-20200412095640260.png)
+
+可以使用的几种整数类型：TINYINT，SMALLINT，MEDIUMINT，INT，BIGINT分别使用8，16，24，32，64位存储空间。
+
+尽量使用满足需求的最小数据类型
+
+![image-20200412095744196](/static/images/blog/image-20200412095744196.png)
+
+1、char长度固定，即每条数据占用等长字节空间；最大长度是255个字符，适合用在身份证号、手机号等定长字符串
+
+2、varchar可变程度，可以设置最大长度；最大空间是65535个字节，适合用在长度可变的属性
+
+3、text不设置长度，当不知道属性的最大长度时，适合用text
+
+按照查询速度：char>varchar>text
+
+![image-20200412095833983](/static/images/blog/image-20200412095833983.png)
+
+4k对齐
+
+![image-20200412100159575](/static/images/blog/image-20200412100159575.png)
+
+![image-20200412100534927](/static/images/blog/image-20200412100534927.png)
+
+MySQL 把每个 BLOB 和 TEXT 值当作一个独立的对象处理。
+
+两者都是为了存储很大数据而设计的字符串类型，分别采用二进制和字符方式存储。
+
+![image-20200412100615434](/static/images/blog/image-20200412100615434.png)
+
+1、不要使用字符串类型来存储日期时间数据
+
+2、日期时间类型通常比字符串占用的存储空间小
+
+3、日期时间类型在进行查找过滤时可以利用日期来进行比对
+
+4、日期时间类型还有着丰富的处理函数，可以方便的对时间类型进行日期计算
+
+5、使用int存储日期时间不如使用timestamp类型
+
+![image-20200412101944180](/static/images/blog/image-20200412101944180.png)
+
+有时可以使用枚举类代替常用的字符串类型，mysql存储枚举类型会非常紧凑，会根据列表值的数据压缩到一个或两个字节中，mysql在内部会将每个值在列表中的位置保存为整数，并且在表的.frm文件中保存“数字-字符串”映射关系的查找表
+
+create table enum\_test(e enum(‘fish’,’apple’,’dog’) not null);
+
+insert into enum\_test(e) values(‘fish’),(‘dog’),(‘apple’);
+
+select e+0 from enum\_test;
+
+![image-20200412101924672](/static/images/blog/image-20200412101924672.png)
+
+![image-20200412102018401](/static/images/blog/image-20200412102018401.png)
+
+人们经常使用varchar(15)来存储ip地址，然而，它的本质是32位无符号整数不是字符串，可以使用INET\_ATON()和INET\_NTOA函数在这两种表示方法之间转换
+
+案例：
+
+select inet\_aton(‘1.1.1.1’)
+
+select inet\_ntoa(16843009)
+
+![image-20200412103739902](/static/images/blog/image-20200412103739902.png)
+
+![image-20200412103806772](/static/images/blog/image-20200412103806772.png)
+
+![image-20200412103858011](/static/images/blog/image-20200412103858011.png)
+
+![image-20200412103937013](/static/images/blog/image-20200412103937013.png)
+
+![image-20200412104012606](/static/images/blog/image-20200412104012606.png)
+
+![image-20200412104627017](/static/images/blog/image-20200412104627017.png)
+
+![image-20200412104731433](/static/images/blog/image-20200412104731433.png)
+
+字符集直接决定了数据在MySQL中的存储编码方式，由于同样的内容使用不同字符集表示所占用的空间大小会有较大的差异，所以通过使用合适的字符集，可以帮助我们尽可能减少数据量，进而减少IO操作次数。
+
+![image-20200412104755130](/static/images/blog/image-20200412104755130.png)
+
+存储引擎的对比
+
+![image-20200412104826553](/static/images/blog/image-20200412104826553.png)
+
+![image-20200412104905220](/static/images/blog/image-20200412104905220.png)
+
+![image-20200412104953485](/static/images/blog/image-20200412104953485.png)
+
+当我们的表中存在类似于 TEXT 或者是很大的 VARCHAR类型的大字段的时候，如果我们大部分访问这张表的时候都不需要这个字段，我们就该义无反顾的将其拆分到另外的独立表中，以减少常用数据所占用的存储空间。这样做的一个明显好处就是每个数据块中可以存储的数据条数可以大大增加，既减少物理 IO 次数，也能大大提高内存中的缓存命中率。
+
+#### 3\. 执行计划及索引优化
+
+![image-20200412105016620](/static/images/blog/image-20200412105016620.png)
+
+![image-20200412105756164](/static/images/blog/image-20200412105756164.png)
+
+![image-20200412112211639](/static/images/blog/image-20200412112211639.png)
+
+想要了解索引的优化方式，必须要对索引的底层原理有所了解
+
+![image-20200412112234939](/static/images/blog/image-20200412112234939.png)
+
+![image-20200412112248241](/static/images/blog/image-20200412112248241.png)
+
+![image-20200412112303993](/static/images/blog/image-20200412112303993.png)
+
+主键索引不能为null, 唯一键索引可以为空
+
+![image-20200412114724008](/static/images/blog/image-20200412114724008.png)
+
+回表: where name = ? 通过非主键索引查到主键之后, 回到主键B+树查整行数据
+
+覆盖索引: select id from where name = ?, 已经有了, 不用回表, 能用尽量用
+
+最左匹配: name = ? and age = ? name = ? age = ?  
+索引name,age, 只能匹配上name,才能用age  
+更优解 name,age + age ,age占用小
+
+索引下推: 必须组合索引, name,age , 查name的时候过滤age, 再放到server层, 减少I/O  
+老版本去除全部name匹配, 在server层匹配age
+
+![image-20200412114626563](/static/images/blog/image-20200412114626563.png)
+
+![image-20200412112536777](/static/images/blog/image-20200412112536777.png)
+
+![image-20200412112612390](/static/images/blog/image-20200412112612390.png)
+
+![image-20200412113253441](/static/images/blog/image-20200412113253441.png)
+
+![image-20200412113426265](/static/images/blog/image-20200412113426265.png)
+
+![image-20200412113509952](/static/images/blog/image-20200412113509952.png)
+
+![image-20200412114023050](/static/images/blog/image-20200412114023050.png)
+
+![image-20200412112303993](/static/images/blog/image-20200412112303993.png)
+
+```sql
+create` `table` `staffs(  ``id ``int` `primary` `key` `auto_increment,  ``name` `varchar``(24) ``not` `null` `default` `''` `comment ``'姓名'``,  ``age ``int` `not` `null` `default` `0 comment ``'年龄'``,  ``pos ``varchar``(20) ``not` `null` `default` `''` `comment ``'职位'``,  ``add_time ``timestamp` `not` `null` `default` `current_timestamp` `comment ``'入职时间' ``) charset utf8 comment ``'员工记录表'``;
+```
+
+———–`alter` `table` `staffs ``add` `index` `idx_nap(``name``, age, pos);`
+
+![image-20200412122811227](/static/images/blog/image-20200412122811227.png)
+
+![image-20200412122909739](/static/images/blog/image-20200412122909739.png)
+
+![image-20200412122954509](/static/images/blog/image-20200412122954509.png)
+
+![image-20200412123132925](/static/images/blog/image-20200412123132925.png)
+
+顺序可变
+
+![image-20200412123310351](/static/images/blog/image-20200412123310351.png)
+
+只访问索引的查询, 索引覆盖, Extra = Using index
+
+![image-20200412123430977](/static/images/blog/image-20200412123430977.png)
+
+![image-20200412123618924](/static/images/blog/image-20200412123618924.png)
+
+当需要存储大量的URL，并且根据URL进行搜索查找，如果使用B+树，存储的内容就会很大
+
+select id from url where url=””
+
+也可以利用将url使用CRC32做哈希，可以使用以下查询方式：
+
+select id fom url where url=”” and url\_crc=CRC32(“”)
+
+此查询性能较高原因是使用体积很小的索引来完成查找
+
+![image-20200412123645897](/static/images/blog/image-20200412123645897.png)
+
+![image-20200412124343123](/static/images/blog/image-20200412124343123.png)
+
+![image-20200412124438272](/static/images/blog/image-20200412124438272.png)
+
+![image-20200412133605454](/static/images/blog/image-20200412133605454.png)
+
+![image-20200412133241914](/static/images/blog/image-20200412133241914.png)
+
+![image-20200412133756408](/static/images/blog/image-20200412133756408.png)
+
+![image-20200412133853963](/static/images/blog/image-20200412133853963.png)
+
+![image-20200412134358329](/static/images/blog/image-20200412134358329.png)
+
+explain执行计划, 看type : system -> const -> ref -> range -> index -> all
+
+![image-20200412134254381](/static/images/blog/image-20200412134254381.png)
+
+![image-20200412134421719](/static/images/blog/image-20200412134421719.png)
+
+前缀索引, 较少索引占用, 较少磁盘I/O, 提高效率  
+![image-20200412163826959](/static/images/blog/image-20200412163826959.png)
+
+![image-20200412163701662](/static/images/blog/image-20200412163701662.png)
+
+![image-20200412163947324](/static/images/blog/image-20200412163947324.png)
+
+![image-20200412164838168](/static/images/blog/image-20200412164838168.png)
+
+Cardinality 近似值596 实际599  
+Cardinality 基数 Hyperloglog算法
+
+![image-20200412164524956](/static/images/blog/image-20200412164524956.png)
+
+Redis, Kylin , 都用到基数
+
+使用索引扫描排序 , 使用索引列排序, 默认asc升序
+
+![image-20200412165909966](/static/images/blog/image-20200412165909966.png)
+
+in, or , union all 比较, 最好用in
+
+![image-20200412171044627](/static/images/blog/image-20200412171044627.png)
+
+exist
+
+![image-20200412171743853](/static/images/blog/image-20200412171743853.png)
+
+![image-20200412165211929](/static/images/blog/image-20200412165211929.png)
+
+join
+
+![image-20200412220944555](/static/images/blog/image-20200412220944555.png)
+
+![image-20200412174505199](/static/images/blog/image-20200412174505199.png)
+
+![image-20200412221229021](/static/images/blog/image-20200412221229021.png)
+
+![image-20200413062608592](/static/images/blog/image-20200413062608592.png)
+
+#### 4\. 查询优化
+
+![image-20200413063315696](/static/images/blog/image-20200413063315696.png)
+
+在编写快速的查询之前，需要清楚一点，真正重要的是响应时间，而且要知道在整个SQL语句的执行过程中每个步骤都花费了多长时间，要知道哪些步骤是拖垮执行效率的关键步骤，想要做到这点，必须要知道查询的生命周期，然后进行优化，不同的应用场景有不同的优化方式，不要一概而论，具体情况具体分析，
+
+![image-20200413063524755](/static/images/blog/image-20200413063524755.png)
+
+![image-20200413063539648](/static/images/blog/image-20200413063539648.png)
+
+![image-20200413063640036](/static/images/blog/image-20200413063640036.png)
+
+数据量大, 不会用索引排序, 阈值约30%
+
+![image-20200413064517705](/static/images/blog/image-20200413064517705.png)
+
+![image-20200413064751910](/static/images/blog/image-20200413064751910.png)
+
+我们常常会误以为mysql会只返回需要的数据，实际上mysql却是先返回全部结果再进行计算，在日常的开发习惯中，经常是先用select语句查询大量的结果，然后获取前面的N行后关闭结果集。  
+优化方式是在查询后面添加limit
+
+![image-20200413064826769](/static/images/blog/image-20200413064826769.png)
+
+select \* from actor inner join film\_actor using(actor\_id) inner join film using(film\_id) where film.title=’Academy Dinosaur’;
+
+select actor.\* from actor…;
+
+![image-20200413064946925](/static/images/blog/image-20200413064946925.png)
+
+在公司的企业需求中，禁止使用select \*,虽然这种方式能够简化开发，但是会影响查询的性能，所以尽量不要使用
+
+![image-20200413065009204](/static/images/blog/image-20200413065009204.png)
+
+如果需要不断的重复执行相同的查询，且每次返回完全相同的数据，因此，基于这样的应用场景，我们可以将这部分数据缓存起来，这样的话能够提高查询效率
+
+![image-20200413070428641](/static/images/blog/image-20200413070428641.png)
+
+**查询缓存:**  
+在解析一个查询语句之前，如果查询缓存是打开的，那么mysql会优先检查这个查询是否命中查询缓存中的数据，如果查询恰好命中了查询缓存，那么会在返回结果之前会检查用户权限，如果权限没有问题，那么mysql会跳过所有的阶段，就直接从缓存中拿到结果并返回给客户端
+
+**查询优化处理:**  
+mysql查询完缓存之后会经过以下几个步骤：解析SQL、预处理、优化SQL执行计划，这几个步骤出现任何的错误，都可能会终止查询
+
+**语法解析器和预处理:**  
+mysql通过关键字将SQL语句进行解析，并生成一颗解析树，mysql解析器将使用mysql语法规则验证和解析查询，例如验证使用使用了错误的关键字或者顺序是否正确等等，预处理器会进一步检查解析树是否合法，例如表名和列名是否存在，是否有歧义，还会验证权限等等
+
+**查询优化器:**  
+当语法树没有问题之后，相应的要由优化器将其转成执行计划，一条查询语句可以使用非常多的执行方式，最后都可以得到对应的结果，但是不同的执行方式带来的效率是不同的，优化器的最主要目的就是要选择最有效的执行计划  
+mysql使用的是基于成本的优化器，在优化的时候会尝试预测一个查询使用某种查询计划时候的成本，并选择其中成本最小的一个  
+CBU: 基于成本优化 (MySQL)  
+RBU: 基于规则优化
+
+![image-20200413070948481](/static/images/blog/image-20200413070948481.png)
+
+![image-20200413071002617](/static/images/blog/image-20200413071002617.png)
+
+![image-20200413071029245](/static/images/blog/image-20200413071029245.png)
+
+Context 上下文, 某一次会话中, 之前执行的操作对当前SQL语句的影响
+
+![image-20200413072014177](/static/images/blog/image-20200413072014177.png)
+
+优化limmit10000,5
+
+![image-20200413174813937](/static/images/blog/image-20200413174813937.png)
+
+![image-20200413073459587](/static/images/blog/image-20200413073459587.png)
+
+![image-20200413071113682](/static/images/blog/image-20200413071113682.png)
+
+两次传输排序:  
+第一次数据读取是将需要排序的字段读取出来，然后进行排序，第二次是将排好序的结果按照需要去读取数据行。  
+这种方式效率比较低，原因是第二次读取数据的时候因为已经排好序，需要去读取所有记录而此时更多的是随机IO，读取数据成本会比较高  
+两次传输的优势，在排序的时候存储尽可能少的数据，让排序缓冲区可以尽可能多的容纳行数来进行排序操作
+
+单次传输排序:  
+先读取查询所需要的所有列，然后再根据给定列进行排序，最后直接返回排序结果，此方式只需要一次顺序IO读取所有的数据，而无须任何的随机IO，问题在于查询的列特别多的时候，会占用大量的存储空间，无法存储大量的数据
+
+![image-20200413074455178](/static/images/blog/image-20200413074455178.png)
+
+count(1)和count(\*)一样
+
+count(field)不包含字段值为NULL的记录。count(_)包含NULL记录。select(_)与select(1) 在InnoDB中性能没有任何区别，处理方式相同。官方文档描述如下：InnoDB handles SELECT COUNT(\*) and SELECT COUNT(1) operations in the same way. There is no performance difference.
+
+![image-20200413175829196](/static/images/blog/image-20200413175829196.png)
+
+![image-20200413175910030](/static/images/blog/image-20200413175910030.png)
+
+![image-20200413175928842](/static/images/blog/image-20200413175928842.png)
+
+![image-20200413180003988](/static/images/blog/image-20200413180003988.png)
+
+自定义变量, 加一列排序
+
+![image-20200413180538800](/static/images/blog/image-20200413180538800.png)
+
+时间变量
+
+![image-20200413181235174](/static/images/blog/image-20200413181235174.png)
+
+![image-20200413181310576](/static/images/blog/image-20200413181310576.png)
+
+用变量, 出错, order by 可能会先与where执行
+
+![image-20200413181838016](/static/images/blog/image-20200413181838016.png)
+
+![image-20200413180038569](/static/images/blog/image-20200413180038569.png)
+
+![image-20200413182856790](/static/images/blog/image-20200413182856790.png)
+
+![image-20200413190620431](/static/images/blog/image-20200413190620431.png)  
+5.5最多分1024ge  
+5.7 8196
+
+![image-20200413183316150](/static/images/blog/image-20200413183316150.png)
+
+range分区
+
+![image-20200413183545258](/static/images/blog/image-20200413183545258.png)
+
+![image-20200413183954569](/static/images/blog/image-20200413183954569.png)
+
+![image-20200414072046877](/static/images/blog/image-20200414072046877.png)
+
+![image-20200414072111984](/static/images/blog/image-20200414072111984.png)
+
+#### 5\. 服务器参数优化
+
+![image-20200414072233347](/static/images/blog/image-20200414072233347.png)
+
+![image-20200414072319805](/static/images/blog/image-20200414072319805.png)
+
+![image-20200414072434007](/static/images/blog/image-20200414072434007.png)
+
+![image-20200414073456938](/static/images/blog/image-20200414073456938.png)
+
+![image-20200414072507555](/static/images/blog/image-20200414072507555.png)
+
+![image-20200414073531928](/static/images/blog/image-20200414073531928.png)
+
+**Redo log (InnoDB存储引擎中)**
+
+Redo log Undo log 都属于InnoDB  
+Bin log 属于MySQL server  
+四种特性  
+A原子性, undo log  
+C最重要, 一致性是根本追求 通过AID实现  
+I 隔离级别 通过锁实现  
+D 持久性通过redo log  
+Redo log 循环写
+
+![image-20200414074327779](/static/images/blog/image-20200414074327779.png)
+
+fsync() 系统调用  
+![image-20200414074932501](/static/images/blog/image-20200414074932501.png)
+
+DML增删改  
+持久化三种方式  
+第二种最安全  
+性能,安全权衡
+
+![image-20200414075057350](/static/images/blog/image-20200414075057350.png)
+
+**Undo log 实现原子原子性 (InnoDB存储引擎中)**
+
+![image-20200414080020674](/static/images/blog/image-20200414080020674.png)
+
+\*_Bin log \*_
+
+MyISAM不支持事务, 只能用bin log
+
+![image-20200414080406899](/static/images/blog/image-20200414080406899.png)
+
+![image-20200414080806807](/static/images/blog/image-20200414080806807.png)
+
+![image-20200414082007433](/static/images/blog/image-20200414082007433.png)
+
+数据和日志分开, 保证两个日志数据一致再从内存写到磁盘
+
+![image-20200414082026834](/static/images/blog/image-20200414082026834.png)
+
+数据安全问题  
+![image-20200414082906217](/static/images/blog/image-20200414082906217.png)
+
+![image-20200415182856782](/static/images/blog/image-20200415182856782.png)
+
+![image-20200415184934017](/static/images/blog/image-20200415184934017.png)
+
+![image-20200415184957598](/static/images/blog/image-20200415184957598.png)

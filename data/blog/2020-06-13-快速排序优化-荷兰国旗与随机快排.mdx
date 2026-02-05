@@ -1,0 +1,36 @@
+---
+title: '快速排序优化——荷兰国旗与随机快排'
+date: '2020-06-13'
+tags: ['算法，排序']
+draft: false
+summary: '如何借助荷兰国旗问题，一步步将快排优化至稳定的O(N*logN)'
+---
+
+### 快速排序
+
+![image-20200423062433436](/static/images/blog/image-20200423062433436.png) ![image-20200423062734100](/static/images/blog/image-20200423062734100.png) 小于等于num, 当前数和<=区下一个数交换 大于num, 直接跳下一个
+
+分三段: 荷兰国旗问题  
+![image-20200423070643055](/static/images/blog/image-20200423070643055.png)  
+![image-20200423063218126](/static/images/blog/image-20200423063218126.png)  
+\[ i \] == num, i++  
+\[ i \] < num, \[ i \] 与<区右一个交换, <区右扩1位, i++  
+\[ i \] > num, \[ i \] 与>区左一个交换, >区左扩1位, i不懂, 这个数还没比较过
+
+荷兰国旗1: 以arr\[R\] 作为划分值  
+![image-20200423064734526](/static/images/blog/image-20200423064734526.png)  
+![image-20200423064753839](/static/images/blog/image-20200423064753839.png)  
+![image-20200423065349613](/static/images/blog/image-20200423065349613.png)
+
+![image-20200423070703395](/static/images/blog/image-20200423070703395.png) ![image-20200423065546159](/static/images/blog/image-20200423065546159.png) ![image-20200423065659272](/static/images/blog/image-20200423065659272.png) ![image-20200423065804180](/static/images/blog/image-20200423065804180.png) ![image-20200423125703988](/static/images/blog/image-20200423125703988.png) ![image-20200423065826323](/static/images/blog/image-20200423065826323.png) ![image-20200423065942356](/static/images/blog/image-20200423065942356.png) !\[image-20200423070051147\](快速排序优化——荷兰国旗与随机快排/image-20200423070051147.png)
+
+1.0/2.0 时间复杂度
+
+![image-20200423125738958](/static/images/blog/image-20200423125738958.png) ![image-20200423070015988](/static/images/blog/image-20200423070015988.png) ![image-20200423125821385](/static/images/blog/image-20200423125821385.png) ![image-20200423070153215](/static/images/blog/image-20200423070153215.png)!\[image-20200423070221686\](快速排序优化——荷兰国旗与随机快排/image-20200423070221686.png)
+
+num在中间, 时间复杂度最低
+
+概率累加 = O(N \* logN)
+
+差情况随机发生  
+![image-20200423070613686](/static/images/blog/image-20200423070613686.png)
