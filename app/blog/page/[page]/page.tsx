@@ -14,7 +14,7 @@ export const generateStaticParams = async () => {
 
 export default async function Page(props: { params: Promise<{ page: string }> }) {
   const params = await props.params
-  const posts = allCoreContent(sortPosts(allBlogs))
+  const posts = allCoreContent(sortPosts(allBlogs as any))
   const pageNumber = parseInt(params.page as string)
   const totalPages = Math.ceil(posts.length / POSTS_PER_PAGE)
 
@@ -33,8 +33,8 @@ export default async function Page(props: { params: Promise<{ page: string }> })
 
   return (
     <ListLayout
-      posts={posts}
-      initialDisplayPosts={initialDisplayPosts}
+      posts={posts as any}
+      initialDisplayPosts={initialDisplayPosts as any}
       pagination={pagination}
       title="All Posts"
     />
